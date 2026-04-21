@@ -1,5 +1,5 @@
 // commit.c — Commit creation and history traversal
-//
+
 // Commit object format (stored as text, one field per line):
 //
 //   tree <64-char-hex-hash>
@@ -28,6 +28,20 @@
 // Forward declarations (implemented in object.c)
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out);
+
+static int try_read_head_parent(ObjectID *parent_out, int *has_parent_out) {
+    if (head_read(parent_out) == 0) {
+        *has_parent_out = 1;
+        return 0;
+    }
+    *has_parent_out = 0;
+    return 0;
+}
+
+static void fill_commit_identity(Commit *commit) {
+    snprintf(commit->author, sizeof(commit->author), "%s", pes_author());
+    commit->timestamp = (uint64_t)time(NULL);
+}
 
 // ─── PROVIDED ────────────────────────────────────────────────────────────────
 
@@ -172,8 +186,11 @@ int head_update(const ObjectID *new_commit) {
     hash_to_hex(new_commit, hex);
     fprintf(f, "%s\n", hex);
     
-    fflush(f);
-    fsync(fileno(f));
+    if (fflush(f) != 0 || fsync(fileno(f)) != 0) {
+        fclose(f);
+        unlink(tmp_path);
+        return -1;
+    }
     fclose(f);
     
     return rename(tmp_path, target_path);
@@ -194,8 +211,49 @@ int head_update(const ObjectID *new_commit) {
 //
 // Returns 0 on success, -1 on error.
 int commit_create(const char *message, ObjectID *commit_id_out) {
-    // TODO: Implement commit creation
-    // (See Lab Appendix for logical steps)
-    (void)message; (void)commit_id_out;
-    return -1;
+    if (!message || !commit_id_out || message[0] == '\0')
+        return -1;
+
+    ObjectID tree_id;
+
+    if (tree_from_index(&tree_id) != 0)
+        return -1;
+    
+    Commit commit;
+    memset(&commit, 0, sizeof(commit));
+
+    commit.tree = tree_id;
+
+    if (try_read_head_parent(&commit.parent, &commit.has_parent) != 0)
+        return -1;
+
+    fill_commit_identity(&commit);
+
+    snprintf(commit.message, sizeof(commit.message), "%s",message);
+
+    void *data;
+    size_t len;
+
+    if (commit_serialize(&commit, &data, &len) != 0)
+        return -1;
+
+    if (len == 0) {
+        free(data);
+        return -1;
+    }
+
+    if (object_write(OBJ_COMMIT, data, len, commit_id_out) != 0)
+    {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+
+    (void)message;
+    (void)commit_id_out;
+    if (head_update(commit_id_out) != 0)
+        return -1;
+
+    return 0;
 }
