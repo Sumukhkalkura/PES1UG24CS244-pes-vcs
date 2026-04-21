@@ -108,7 +108,6 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         free(full);
         return -1;
     }
-
     if (write(fd, full, total_size) != (ssize_t)total_size) {
         close(fd);
         free(full);
@@ -172,19 +171,15 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
     size_t data_size;
 
     sscanf(buffer, "%s %zu", type_str, &data_size);
-
     if (strcmp(type_str, "blob") == 0) *type_out = OBJ_BLOB;
     else if (strcmp(type_str, "tree") == 0) *type_out = OBJ_TREE;
     else *type_out = OBJ_COMMIT;
-
     char *data_start = null_pos + 1;
-
     *data_out = malloc(data_size);
     if (!*data_out) {
         free(buffer);
         return -1;
     }
-
     memcpy(*data_out, data_start, data_size);
     *len_out = data_size;
 
