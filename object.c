@@ -63,7 +63,9 @@ int object_exists(const ObjectID *id) {
     return access(path, F_OK) == 0;
 }
 
+
 // ─── TODO: Implement these ──────────────────────────────────────────────────
+
 
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
     const char *type_str = (type == OBJ_BLOB) ? "blob" :
